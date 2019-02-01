@@ -1,0 +1,109 @@
+library(quantmod)
+library(rugarch)
+library(rmgarch)
+startdate = as.Date("2008-01-03")
+enddate = as.Date("2018-04-30")
+
+getSymbols("LT.NS", from = startdate, to = enddate)
+getSymbols("TCS.NS", from = startdate, to = enddate)
+getSymbols("ITC.NS", from = startdate, to = enddate)
+head(ITC.NS)
+str(ITC.NS)
+chartSeries(ITC.NS)
+
+rLT <- dailyReturn(LT.NS)
+rTCS <- dailyReturn(TCS.NS)
+rITC <- dailyReturn(ITC.NS)
+
+rX <- data.frame(rLT, rTCS, rITC)
+names(rX) [1] <- "rLT"
+names(rX) [2] <- "rTCS"
+names(rX) [3] <- "rITC"
+
+ug_spec = ugarchspec()
+
+ug_spec
+
+ug_spec <- ugarchspec(mean.model = list(armaOrder=c(1,0)))
+
+ugfit = ugarchfit(spec = ug_spec, data = rTCS)
+
+ugfit
+
+ugfit@fit$coef
+
+ug_var <- ugfit@fit$var
+ug_res2 <- (ugfit@fit$residuals) ^2
+
+plot(ug_res2 , type = "l")
+lines(ug_var, col="green")
+
+ugfore <- ugarchforecast(ugfit, n.ahead = 10)
+ugfore
+
+ug_f <- ugfore@forecast$sigmaFor
+plot(ug_f, type="l")
+
+
+ug_var_t <- c(tail(ug_var,20), rep(NA,10))
+ug_res2_t <- c(tail(ug_res2,20), rep(NA,10))
+ug_f <- c(rep(NA,20), (ug_f)^2)
+
+plot(ug_res2_t, type="l")
+lines(ug_f, col="orange")
+lines(ug_var_t, col="green")
+
+
+uspec.n = multispec(replicate(3,ugarchspec(mean.model = list(armaOrder = c(1,0)))))
+multf = multifit(uspec.n,rX)
+
+multf
+
+spec1 = dccspec(uspec = uspec.n, dccOrder = c(1,1), distribution = "mvnorm")
+fit1 = dccfit(spec1, data = rX, fit.control = list(eval.se = TRUE), fit = multf)
+
+fit1
+
+cov1 = rcov(fit1)
+cor1 = rcor(fit1)
+
+dim(cor1)
+
+cor1[,,dim(cor1)[3]]
+
+cor_ltcs <- cor1[2,1,]
+cor_ltcs <- as.xts(cor_ltcs)
+
+plot(cor_ltcs)
+par(mfrow=c(3,1))
+plot(as.xts(cor1[1,2,]), main="Lnt and TCS")  
+plot(as.xts(cor1[1,3,]), main="Lnt and ITC")  
+plot(as.xts(cor1[2,3,]), main="TCS and ITC")  
+
+dccf1 <- dccforecast(fit1, n.ahead = 10)
+dccf1
+
+Rf <- dccf1@mforecast$R
+
+str(Rf)
+
+corf_ltcs <- Rf[[1]][1,2,]
+corf_litc <- Rf[[1]][1,3,]
+corf_tcsItc <- Rf[[1]][2,3,]
+
+par(mfrow=c(3,1))
+c_ltcs <- c(tail(cor1[1,2,], 20), rep(NA,10))
+cf_ltcs <- c(rep(NA, 20), corf_ltcs)
+plot(c_ltcs, type ="l", main ="Correlation LnT and TCS")
+lines(cf_ltcs, type = "l", col="orange")
+
+
+c_litc <- c(tail(cor1[1,3,], 20), rep(NA,10))
+cf_litc <- c(rep(NA, 20), corf_litc)
+plot(c_litc, type ="l", main ="Correlation LnT and ITC")
+lines(cf_litc, type = "l", col="orange")
+
+c_tcsItc <- c(tail(cor1[2,3,], 20), rep(NA,10))
+cf_tcsItc <- c(rep(NA, 20), corf_tcsItc)
+plot(c_tcsItc, type ="l", main ="Correlation TCS and ITC")
+lines(cf_tcsItc, type = "l", col="orange")
